@@ -31,10 +31,7 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.*;
 import org.bukkit.persistence.PersistentDataContainer;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 import static io.th0rgal.oraxen.items.ItemBuilder.ORIGINAL_NAME_KEY;
 import static io.th0rgal.oraxen.items.ItemBuilder.UNSTACKABLE_KEY;
@@ -156,20 +153,25 @@ public class ItemUpdater implements Listener {
             for (Map.Entry<Enchantment, Integer> entry : newMeta.getEnchants().entrySet().stream().filter(e -> !oldMeta.getEnchants().containsKey(e.getKey())).toList())
                 itemMeta.addEnchant(entry.getKey(), entry.getValue(), true);
 
-            int cmd = newMeta.hasCustomModelData() ? newMeta.getCustomModelData() : oldMeta.hasCustomModelData() ? oldMeta.getCustomModelData() : 0;
+            Integer cmd = newMeta.hasCustomModelData() ? (Integer) newMeta.getCustomModelData() : oldMeta.hasCustomModelData() ? (Integer) oldMeta.getCustomModelData() : null;
             itemMeta.setCustomModelData(cmd);
 
             // If OraxenItem has no lore, we should assume that 3rd-party plugin has added lore
-            if (Settings.OVERRIDE_ITEM_LORE.toBool()) itemMeta.setLore(newMeta.getLore());
-            else itemMeta.setLore(oldMeta.getLore());
+            if (Settings.OVERRIDE_ITEM_LORE.toBool()) {
+                if (VersionUtil.isPaperServer()) itemMeta.lore(newMeta.lore());
+                else itemMeta.setLore(newMeta.getLore());
+            } else {
+                if (VersionUtil.isPaperServer()) itemMeta.lore(oldMeta.lore());
+                else itemMeta.setLore(oldMeta.getLore());
+            }
 
             // Only change AttributeModifiers if the new item has some
             if (newMeta.hasAttributeModifiers()) itemMeta.setAttributeModifiers(newMeta.getAttributeModifiers());
-            else itemMeta.setAttributeModifiers(oldMeta.getAttributeModifiers());
+            else if (oldMeta.hasAttributeModifiers()) itemMeta.setAttributeModifiers(oldMeta.getAttributeModifiers());
 
             // Transfer over durability from old item
             if (itemMeta instanceof Damageable damageable && oldMeta instanceof Damageable oldDmg) {
-                damageable.setDamage(oldDmg.getDamage());
+                if (oldDmg.hasDamage()) damageable.setDamage(oldDmg.getDamage());
             }
 
             if (oldMeta.isUnbreakable()) itemMeta.setUnbreakable(true);
@@ -229,24 +231,42 @@ public class ItemUpdater implements Listener {
             }
 
             // On 1.20.5+ we use ItemName which is different from userchanged displaynames
-            // Thus removing the need for this logic
             if (!VersionUtil.atOrAbove("1.20.5")) {
-                // Parsing with legacy here to fix any inconsistensies caused by server serializers etc
-                String oldDisplayName = AdventureUtils.parseLegacy(oldMeta.getDisplayName());
+
+                String oldDisplayName = oldMeta.hasDisplayName() ? AdventureUtils.parseLegacy(VersionUtil.isPaperServer() ? AdventureUtils.MINI_MESSAGE.serialize(oldMeta.displayName()) : AdventureUtils.parseLegacy(oldMeta.getDisplayName())) : null;
                 String originalName = AdventureUtils.parseLegacy(oldPdc.getOrDefault(ORIGINAL_NAME_KEY, DataType.STRING, ""));
+
                 if (Settings.OVERRIDE_RENAMED_ITEMS.toBool()) {
-                    itemMeta.setDisplayName(newMeta.getDisplayName());
+                    if (VersionUtil.isPaperServer()) itemMeta.displayName(newMeta.displayName());
+                    else itemMeta.setDisplayName(newMeta.getDisplayName());
                 } else if (!originalName.equals(oldDisplayName)) {
-                    itemMeta.setDisplayName(oldMeta.getDisplayName());
+                    if (VersionUtil.isPaperServer()) itemMeta.displayName(oldMeta.displayName());
+                    else itemMeta.setDisplayName(oldMeta.getDisplayName());
                 } else {
-                    itemMeta.setDisplayName(newMeta.getDisplayName());
+                    if (VersionUtil.isPaperServer()) itemMeta.displayName(newMeta.displayName());
+                    else itemMeta.setDisplayName(newMeta.getDisplayName());
+                }
+
+                originalName = newMeta.hasDisplayName() ? VersionUtil.isPaperServer()
+                        ? AdventureUtils.MINI_MESSAGE.serialize(newMeta.displayName())
+                        : newMeta.getDisplayName()
+                        : null;
+                if (originalName != null) itemPdc.set(ORIGINAL_NAME_KEY, DataType.STRING, originalName);
+            } else { // Set the displayName/customName if it exists on an item before
+                if (newMeta.hasDisplayName() && !newMeta.getDisplayName().isEmpty()) {
+                    if (VersionUtil.isPaperServer()) itemMeta.displayName(newMeta.displayName());
+                    else itemMeta.setDisplayName(newMeta.getDisplayName());
+                } else {
+                    if (VersionUtil.isPaperServer()) itemMeta.displayName(oldMeta.displayName());
+                    else itemMeta.setDisplayName(oldMeta.getDisplayName());
                 }
             }
 
-            itemPdc.set(ORIGINAL_NAME_KEY, DataType.STRING, newMeta.getDisplayName());
+
             // If the item is not unstackable, we should remove the unstackable tag
             // Also remove it on 1.20.5+ due to maxStackSize component
             if (VersionUtil.atOrAbove("1.20.5") || !newItemBuilder.isUnstackable()) itemPdc.remove(UNSTACKABLE_KEY);
+            else itemPdc.set(UNSTACKABLE_KEY, DataType.UUID, UUID.randomUUID());
         });
 
         return newItem;
