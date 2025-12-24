@@ -149,8 +149,7 @@ public class ItemBuilder {
         }
 
         if (itemMeta.hasDisplayName()) {
-            if (VersionUtil.isPaperServer()) displayName = AdventureUtils.MINI_MESSAGE.serialize(itemMeta.displayName());
-            else displayName = itemMeta.getDisplayName();
+            displayName = itemMeta.getDisplayName();
         }
 
         unbreakable = itemMeta.isUnbreakable();
