@@ -128,27 +128,41 @@ public class ItemsView {
     }
 
     private Pair<ItemStack, Integer> getItemStack(final File file) {
-        ItemStack itemStack;
+        ItemStack itemStack = null;
         String fileName = Utils.removeExtension(file.getName());
-        String material = settings.getString(String.format("oraxen_inventory.menu_layout.%s.icon", fileName), "PAPER");
+        String material = settings.getString(String.format("oraxen_inventory.menu_layout.%s.icon", fileName), null);
         String displayName = ItemParser.parseComponentDisplayName(settings.getString(String.format("oraxen_inventory.menu_layout.%s.displayname", fileName), "<green>" + file.getName()));
         try {
-            itemStack = new ItemBuilder(OraxenItems.getItemById(material).getReferenceClone())
-                    .addItemFlags(ItemFlag.HIDE_ATTRIBUTES)
-                    .setDisplayName(displayName)
-                    .setLore(new ArrayList<>())
-                    .build();
-        } catch (final Exception e) {
-            try {
-                itemStack = new ItemBuilder(Material.getMaterial(material.toUpperCase()))
-                        .addItemFlags(ItemFlag.HIDE_ATTRIBUTES)
-                        .setDisplayName(displayName)
-                        .build();
-            } catch (final Exception ignored) {
-                itemStack = new ItemBuilder(Material.PAPER)
-                        .setDisplayName(displayName)
-                        .build();
+            ItemBuilder item;
+            // 优先使用配置
+            if (material != null) {
+                item = OraxenItems.getItemById(material);
+                if (item != null) {
+                    itemStack = new ItemBuilder(item.getReferenceClone())
+                            .addItemFlags(ItemFlag.HIDE_ATTRIBUTES)
+                            .setDisplayName(displayName)
+                            .setLore(new ArrayList<>())
+                            .build();
+                } else {
+                    try {
+                        itemStack = new ItemBuilder(Material.getMaterial(material.toUpperCase()))
+                                .addItemFlags(ItemFlag.HIDE_ATTRIBUTES)
+                                .setDisplayName(displayName)
+                                .build();
+                    } catch (final Exception ignored) {
+                        itemStack = new ItemBuilder(Material.PAPER)
+                                .setDisplayName(displayName)
+                                .build();
+                    }
+                }
+            } else {
+                // 如果配置中没有设置图标，则使用文件中的第一个物品
+                itemStack = OraxenItems.getMap().get(file).values().stream().findFirst()
+                        .orElse(new ItemBuilder(Material.PAPER))
+                        .clone().addItemFlags(ItemFlag.HIDE_ATTRIBUTES).setDisplayName(displayName).setLore(new ArrayList<>()).build();
             }
+        } catch (final Exception ignored) {
+
         }
 
         // avoid possible bug if isOraxenItems is available but can't be an itemstack
